@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Canvas English Trainer (PWA)</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1724">
+<style>
+  :root{
+    --bg:#0f1724; --card:#0b1220; --accent:#6ee7b7; --muted:#9aa6b2; --glass: rgba(255,255,255,0.03);
+    font-family: "Helvetica Neue", Arial, sans-serif;
+  }
+  body{ margin:0; background:linear-gradient(180deg,#071024 0%, #071e2b 100%); color:#e6eef6; -webkit-font-smoothing:antialiased; }
+  .container{max-width:1100px;margin:28px auto;padding:20px;display:grid;grid-template-columns:1fr 420px;gap:20px;}
+  .panel{background:var(--card);border-radius:12px;padding:18px;box-shadow:0 6px 18px rgba(2,6,23,0.5);}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  h1{font-size:18px;margin:0} small{color:var(--muted)}
+  .dashboard{display:flex;gap:16px;align-items:center}
+  canvas#progress{width:220px;height:220px;background:var(--glass);border-radius:12px;display:block}
+  .stats{flex:1} .stat{margin-bottom:8px}
+  .controls{display:flex;gap:8px;margin-top:12px}
+  button{background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.04); color:inherit;padding:8px 12px;border-radius:8px;cursor:pointer}
+  input[type=number], input[type=text], select{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:8px;color:inherit;width:100%}
+  .section{margin-top:14px} .flex{display:flex;gap:10px} .col{flex:1} ul{padding-left:18px}
+  .word-list{max-height:220px;overflow:auto;margin-top:8px} .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);padding:10px;border-radius:8px;margin-bottom:8px}
+  .quiz-area{margin-top:8px} .center{text-align:center}
+  footer{margin-top:16px; font-size:13px; color:var(--muted); text-align:center}
+  @media(max-width:980px){ .container{grid-template-columns:1fr; padding:12px} canvas#progress{width:200px;height:200px;margin:0 auto;display:block} }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="panel">
+    <header>
+      <div>
+        <h1>Canvas English Trainer</h1>
+        <small>目標: アメリカで不自由なく生活できるレベルを目指す</small>
+      </div>
+      <div style="text-align:right">
+        <small id="todayDate"></small>
+        <div id="todayGoalText" style="margin-top:6px;color:var(--muted)"></div>
+      </div>
+    </header>
+
+    <div class="dashboard">
+      <canvas id="progress" width="440" height="440"></canvas>
+      <div class="stats">
+        <div class="stat"><strong>今日の合計学習時間:</strong> <span id="todayMinutes">0</span> 分</div>
+        <div class="stat"><strong>セッション:</strong> <span id="sessionStatus">Stopped</span></div>
+
+        <div class="section">
+          <label><small>Daily Goal (minutes)</small></label>
+          <div class="flex">
+            <input type="number" id="dailyGoal" min="1" placeholder="例: 60">
+            <button id="setGoalBtn">Set Goal</button>
+          </div>
+          <div class="controls">
+            <button id="startBtn">Start Session</button>
+            <button id="stopBtn" disabled>Stop Session</button>
+            <button id="resetToday">Reset Today</button>
+          </div>
+        </div>
+
+        <div class="section card">
+          <strong>Quick Actions</strong>
+          <div style="margin-top:8px">
+            <button id="addSample">Add Sample Words</button>
+            <button id="takeQuickQuiz">Take Quick Quiz</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section flex">
+      <div class="col card">
+        <strong>Grammar & Vocab</strong>
+        <div style="margin-top:8px">
+          <input type="text" id="newWord" placeholder="単語 or フレーズ を入力">
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input type="text" id="newDef" placeholder="意味 / ヒント">
+            <button id="addWord">Add</button>
+          </div>
+          <div class="word-list" id="wordList"></div>
+        </div>
+      </div>
+
+      <div class="col card">
+        <strong>Flashcards / Quiz</strong>
+        <div class="quiz-area" id="quizArea">
+          <div id="flashcard" class="card center">単語を追加して開始</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="showAnswer">Show Answer</button>
+            <button id="nextCard">Next</button>
+            <button id="startMC">Multiple Choice</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section flex">
+      <div class="col card">
+        <strong>Pronunciation Game</strong>
+        <div style="margin-top:8px">
+          <select id="pronPhrase">
+            <option>How are you doing today?</option>
+            <option>Could you repeat that, please?</option>
+            <option>I would like to order a coffee.</option>
+            <option>Where is the nearest subway station?</option>
+          </select>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="playPhrase">Play</button>
+            <button id="startRec">Start Recording</button>
+            <button id="stopRec" disabled>Stop</button>
+          </div>
+          <div style="margin-top:8px" id="pronResult">Score: —</div>
+          <small style="color:var(--muted)">※ 音声認識はブラウザ依存（Chrome 系が有利）。</small>
+        </div>
+      </div>
+
+      <div class="col card">
+        <strong>Listening (News)</strong>
+        <div style="margin-top:8px">
+          <label><small>Sample news (built-in TTS)</small></label>
+          <textarea id="engNewsText" rows="4" style="width:100%;background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:6px;color:inherit">Breaking: Local community celebrates opening of new science center focused on space technology. The center will host exhibitions, workshops, and international collaboration programs.</textarea>
+          <textarea id="jpNewsText" rows="3" style="width:100%;margin-top:8px;background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:6px;color:inherit">速報：地域のコミュニティが宇宙技術に特化した新しい科学センターの開所を祝いました。センターでは展示やワークショップ、国際協力プログラムが行われます。</textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="playNews">Play EN → JP (TTS)</button>
+            <button id="stopNews">Stop</button>
+          </div>
+          <small style="color:var(--muted)">※ ブラウザの音声合成 (SpeechSynthesis) を使います。英語・日本語の音声が利用できれば自然に聞こえます。</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="section card">
+      <strong>History (7 days)</strong>
+      <canvas id="history" width="860" height="200" style="width:100%;height:120px;"></canvas>
+    </div>
+
+    <footer>ローカルのみ保存（LocalStorage）。クラウド同期やユーザー管理を追加できます。</footer>
+  </div>
+
+  <div class="panel">
+    <header><h1>Help & Tips</h1></header>
+    <div style="line-height:1.6">
+      <p><strong>発音ゲーム:</strong> 「Play」でセンテンスを読み上げ、Start Recording で自分の声を録音して比較します。認識結果に基づき簡易スコアを表示。</p>
+      <p><strong>リスニング:</strong> 内蔵のニュース原稿をブラウザの TTS で英語→日本語の順に自動再生します。より自然な音声が欲しければ音声ファイルを差し替えてください（手順は README に記載）。</p>
+      <p><strong>目標管理:</strong> 毎日の目標を設定すると、進捗サークルと履歴チャートで確認できます。時差や日付跨ぎは端末の現地日付を使用します。</p>
+      <hr>
+      <p>さらに「翻訳機能」「例文自動生成」「SRS（間隔反復）」などを追加できます。希望があれば設計/実装します。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ------------------------ Utilities & Storage ------------------------
+const STORAGE_KEY = 'canvas_english_trainer_v1';
+function todayKey(){ const d=new Date(); return d.toISOString().slice(0,10); }
+function loadData(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw) return {goals:{}, minutes:{}, words:[], history:{}};
+  try { return JSON.parse(raw); } catch (e){ return {goals:{}, minutes:{}, words:[], history:{}}; }
+}
+function saveData(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }
+let DATA = loadData();
+// ensure structures
+DATA.goals = DATA.goals || {};
+DATA.minutes = DATA.minutes || {};
+DATA.words = DATA.words || [];
+DATA.history = DATA.history || {};
+
+// ------------------------ Date UI init ------------------------
+document.getElementById('todayDate').textContent = (new Date()).toLocaleDateString();
+
+// ------------------------ Progress Canvas ------------------------
+const pCan = document.getElementById('progress');
+const pCtx = pCan.getContext('2d');
+
+function drawProgress(){
+  const w = pCan.width, h = pCan.height, cx=w/2, cy=h/2, r=Math.min(w,h)/2 - 28;
+  pCtx.clearRect(0,0,w,h);
+  pCtx.beginPath(); pCtx.arc(cx,cy,r,0,Math.PI*2); pCtx.fillStyle = 'rgba(255,255,255,0.02)'; pCtx.fill();
+  const k = todayKey();
+  const mins = DATA.minutes[k] || 0;
+  const goal = DATA.goals[k] || 60;
+  const frac = Math.min(1, mins / goal);
+  pCtx.lineWidth = 18;
+  pCtx.strokeStyle = 'rgba(255,255,255,0.06)';
+  pCtx.beginPath(); pCtx.arc(cx,cy,r-12, -Math.PI/2, -Math.PI/2 + Math.PI*2); pCtx.stroke();
+  pCtx.lineWidth = 20;
+  const grad = pCtx.createLinearGradient(0,0,w,0);
+  grad.addColorStop(0, '#6ee7b7'); grad.addColorStop(1, '#60a5fa');
+  pCtx.strokeStyle = grad;
+  pCtx.beginPath(); pCtx.arc(cx,cy,r-12, -Math.PI/2, -Math.PI/2 + Math.PI*2*frac); pCtx.stroke();
+  pCtx.fillStyle = '#e6eef6';
+  pCtx.font = '32px system-ui';
+  pCtx.textAlign='center'; pCtx.textBaseline='middle';
+  pCtx.fillText(Math.round(mins) + 'm', cx, cy - 8);
+  pCtx.font = '13px system-ui';
+  pCtx.fillStyle = 'rgba(230,238,246,0.7)';
+  pCtx.fillText('Goal: ' + goal + 'm', cx, cy + 22);
+  document.getElementById('todayMinutes').textContent = Math.round(mins);
+  document.getElementById('todayGoalText').textContent = '目標: ' + goal + ' 分';
+}
+drawProgress();
+
+// ------------------------ Goal & Timer ------------------------
+let sessionTimer = null;
+let sessionStart = null;
+function setGoalForToday(g){
+  const k = todayKey(); DATA.goals[k] = g; saveData(); drawProgress();
+}
+document.getElementById('setGoalBtn').addEventListener('click', ()=>{
+  const v = parseInt(document.getElementById('dailyGoal').value,10);
+  if(!v || v<=0) return alert('正しい分数を入力してください');
+  setGoalForToday(v);
+});
+
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  if(sessionTimer) return;
+  sessionStart = Date.now();
+  sessionTimer = setInterval(()=> {
+    const elapsed = (Date.now()-sessionStart)/60000;
+    document.getElementById('sessionStatus').textContent = 'Running (' + Math.round(elapsed) + ' m)';
+  }, 1000);
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+});
+document.getElementById('stopBtn').addEventListener('click', ()=>{
+  if(!sessionTimer) return;
+  clearInterval(sessionTimer); sessionTimer = null;
+  const elapsedMin = (Date.now()-sessionStart)/60000;
+  sessionStart = null;
+  const k = todayKey();
+  DATA.minutes[k] = (DATA.minutes[k]||0) + elapsedMin;
+  DATA.history[k] = DATA.minutes[k];
+  saveData(); drawProgress();
+  document.getElementById('sessionStatus').textContent = 'Stopped';
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+  drawHistory();
+});
+document.getElementById('resetToday').addEventListener('click', ()=>{
+  if(!confirm('今日の記録をリセットしますか？')) return;
+  const k = todayKey(); delete DATA.minutes[k]; delete DATA.goals[k]; delete DATA.history[k];
+  saveData(); drawProgress(); drawHistory();
+});
+
+// ------------------------ Words CRUD & Flashcards ------------------------
+const wordListEl = document.getElementById('wordList');
+function renderWords(){
+  wordListEl.innerHTML = '';
+  DATA.words.forEach((w,i)=>{
+    const div = document.createElement('div'); div.className='card';
+    div.innerHTML = `<strong>${escapeHtml(w.term)}</strong> <small style="color:var(--muted)">— ${escapeHtml(w.def)}</small>
+      <div style="margin-top:6px"><button data-i="${i}" class="delW">Delete</button></div>`;
+    wordListEl.appendChild(div);
+  });
+  document.querySelectorAll('.delW').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const i = +e.target.dataset.i; DATA.words.splice(i,1); saveData(); renderWords();
+    });
+  });
+}
+function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }
+
+document.getElementById('addWord').addEventListener('click', ()=>{
+  const t = document.getElementById('newWord').value.trim();
+  const d = document.getElementById('newDef').value.trim();
+  if(!t) return alert('単語を入力してください');
+  DATA.words.push({term:t,def:d}); saveData(); renderWords();
+  document.getElementById('newWord').value=''; document.getElementById('newDef').value='';
+});
+document.getElementById('addSample').addEventListener('click', ()=>{
+  const sample = [
+    {term:'commute', def:'(v) 通勤する'},
+    {term:'apartment', def:'(n) アパート；マンション'},
+    {term:'Could you repeat that?', def:'聞き返す表現'},
+    {term:'I\\'m looking for...', def:'探している表現'}
+  ];
+  DATA.words.push(...sample); saveData(); renderWords();
+});
+
+let currentIndex = 0;
+function showFlashcard(){
+  const el = document.getElementById('flashcard');
+  if(DATA.words.length===0){ el.textContent='単語を追加して開始'; return; }
+  currentIndex = (currentIndex % DATA.words.length + DATA.words.length) % DATA.words.length;
+  const w = DATA.words[currentIndex];
+  el.innerHTML = `<div style="font-size:18px">${escapeHtml(w.term)}</div><div id="flashAnswer" style="margin-top:8px;color:var(--muted)">—</div>`;
+}
+document.getElementById('nextCard').addEventListener('click', ()=>{ currentIndex++; showFlashcard(); });
+document.getElementById('showAnswer').addEventListener('click', ()=>{
+  const ans = DATA.words[currentIndex] ? DATA.words[currentIndex].def : '—';
+  document.getElementById('flashAnswer').textContent = ans;
+});
+document.getElementById('startMC').addEventListener('click', ()=>{
+  if(DATA.words.length<2) return alert('選択肢クイズには単語が2つ以上必要です。');
+  const idx = Math.floor(Math.random()*DATA.words.length);
+  const correct = DATA.words[idx];
+  const choices = [correct];
+  while(choices.length<4 && choices.length<DATA.words.length){
+    const c = DATA.words[Math.floor(Math.random()*DATA.words.length)];
+    if(!choices.includes(c)) choices.push(c);
+  }
+  for(let i=choices.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [choices[i],choices[j]]=[choices[j],choices[i]]; }
+  const qa = document.getElementById('flashcard');
+  qa.innerHTML = `<div style="font-size:16px">"${escapeHtml(correct.def || '意味')" に対応する語は？</div>`;
+  const list = document.createElement('div'); list.style.marginTop='10px';
+  choices.forEach((c,i)=>{
+    const b = document.createElement('button'); b.textContent=c.term; b.style.display='block'; b.style.margin='6px 0';
+    b.addEventListener('click', ()=>{ if(c.term===correct.term){ alert('Correct!'); } else { alert('Wrong — 正解: ' + correct.term); } });
+    list.appendChild(b);
+  });
+  qa.appendChild(list);
+});
+document.getElementById('takeQuickQuiz').addEventListener('click', ()=>{ document.getElementById('startMC').click(); });
+
+renderWords(); showFlashcard();
+
+// ------------------------ Pronunciation Game (SpeechRecognition & Synthesis) ------------------------
+const synth = window.speechSynthesis;
+document.getElementById('playPhrase').addEventListener('click', ()=>{
+  const text = document.getElementById('pronPhrase').value;
+  if(!synth) return alert('Speech Synthesis が利用できません。');
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang='en-US'; u.rate = 0.95; synth.cancel(); synth.speak(u);
+});
+
+let recog = null; let recogActive = false; let lastTranscript = '';
+function initRecog(){
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition) return null;
+  const r = new SpeechRecognition();
+  r.lang = 'en-US'; r.interimResults = false; r.maxAlternatives = 3;
+  r.onresult = (ev)=> { lastTranscript = Array.from(ev.results).map(r=>r[0].transcript).join(' '); computePronScore(); };
+  r.onerror = (e)=> { console.log('recog error', e); document.getElementById('pronResult').textContent = 'Recognition error'; }
+  r.onend = ()=> { recogActive=false; document.getElementById('startRec').disabled=false; document.getElementById('stopRec').disabled=true; }
+  return r;
+}
+
+document.getElementById('startRec').addEventListener('click', async ()=>{
+  if(!recog) recog = initRecog();
+  if(!recog) return alert('このブラウザは音声認識に対応していません。Chrome 系を推奨します。');
+  lastTranscript=''; recog.start(); recogActive=true;
+  document.getElementById('startRec').disabled=true; document.getElementById('stopRec').disabled=false;
+  document.getElementById('pronResult').textContent='Listening...';
+});
+document.getElementById('stopRec').addEventListener('click', ()=>{ if(recog && recogActive) recog.stop(); });
+
+function computePronScore(){
+  const target = document.getElementById('pronPhrase').value.toLowerCase().replace(/[^\w\s]/g,'').trim();
+  const rec = (lastTranscript||'').toLowerCase().replace(/[^\w\s]/g,'').trim();
+  if(!rec){ document.getElementById('pronResult').textContent='No speech detected'; return; }
+  const tWords = target.split(/\s+/); const rWords = rec.split(/\s+/);
+  let match=0; tWords.forEach(w=>{ if(rWords.includes(w)) match++; });
+  const score = Math.round(100 * match / Math.max(1, tWords.length));
+  document.getElementById('pronResult').textContent = `You said: "${rec}" — Score: ${score}%`;
+}
+
+// ------------------------ Listening (built-in TTS news EN->JP) ------------------------
+let newsQueue = [];
+function playNewsSequence(){
+  const eng = document.getElementById('engNewsText').value.trim();
+  const jp = document.getElementById('jpNewsText').value.trim();
+  newsQueue = [];
+  if(eng) newsQueue.push({text:eng, lang:'en-US'});
+  if(jp) newsQueue.push({text:jp, lang:'ja-JP'});
+  playNextInQueue();
+}
+function playNextInQueue(){
+  if(newsQueue.length===0) return;
+  const item = newsQueue.shift();
+  if(!synth) return alert('SpeechSynthesis が利用できません');
+  const u = new SpeechSynthesisUtterance(item.text);
+  u.lang = item.lang;
+  u.rate = 1.0;
+  u.onend = ()=> setTimeout(()=> playNextInQueue(), 300);
+  synth.cancel(); synth.speak(u);
+}
+document.getElementById('playNews').addEventListener('click', ()=> playNewsSequence());
+document.getElementById('stopNews').addEventListener('click', ()=> { if(synth) synth.cancel(); newsQueue = []; });
+
+// ------------------------ History Chart ------------------------
+const histCan = document.getElementById('history'); const hCtx = histCan.getContext('2d');
+function drawHistory(){
+  const days = 7; const arr = []; const labels = [];
+  for(let i=days-1;i>=0;i--){ const d = new Date(); d.setDate(d.getDate()-i); const k = d.toISOString().slice(0,10); labels.push(k.slice(5)); arr.push(Math.round((DATA.history[k]||DATA.minutes[k]||0))); }
+  const W = histCan.width, H = histCan.height; hCtx.clearRect(0,0,W,H);
+  const maxv = Math.max(...arr, 60);
+  hCtx.strokeStyle='rgba(255,255,255,0.04)'; hCtx.lineWidth=1;
+  for(let i=0;i<=4;i++){ const y = 20 + i*(H-40)/4; hCtx.beginPath(); hCtx.moveTo(40,y); hCtx.lineTo(W-10,y); hCtx.stroke(); }
+  hCtx.beginPath();
+  arr.forEach((v,i)=>{ const x = 40 + i*(W-60)/(days-1); const y = 20 + (1 - v/maxv) * (H-40); if(i===0) hCtx.moveTo(x,y); else hCtx.lineTo(x,y); });
+  const g = hCtx.createLinearGradient(0,0,W,0); g.addColorStop(0,'#6ee7b7'); g.addColorStop(1,'#60a5fa');
+  hCtx.strokeStyle = g; hCtx.lineWidth = 3; hCtx.stroke();
+  hCtx.fillStyle='rgba(230,238,246,0.9)'; hCtx.font='12px system-ui'; hCtx.textAlign='center';
+  arr.forEach((v,i)=>{ const x = 40 + i*(W-60)/(days-1); const y = 20 + (1 - v/maxv) * (H-40); hCtx.beginPath(); hCtx.arc(x,y,4,0,Math.PI*2); hCtx.fill(); hCtx.fillText(v + 'm', x, y - 10); hCtx.fillText(labels[i], x, H-8); });
+}
+drawHistory();
+
+
+// ------------------------ Initialization ------------------------
+const k0 = todayKey();
+if(!(k0 in DATA.goals)) DATA.goals[k0] = DATA.goals[k0] || 60;
+if(!(k0 in DATA.minutes)) DATA.minutes[k0] = DATA.minutes[k0] || 0;
+saveData(); drawProgress(); drawHistory();
+window.addEventListener('beforeunload', ()=> saveData());
+
+// ------------------------ Service Worker registration ------------------------
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(()=> console.log('SW registered')).catch(e=> console.log('SW reg failed', e));
+}
+window._app = { DATA, drawProgress, drawHistory };
+</script>
+</body>
+</html>
+
+
